@@ -76,6 +76,16 @@ Prints the book, and exits `4` if the ladder looks unusable — most often
 cumulative figures published as incremental, which makes a thin book look
 several times deeper than it is.
 
+## What does a sequence actually cost?
+
+```bash
+crifine simulate aave-v3-weth --sizes 500k,500k,1m
+```
+
+Walks the orders in order and consumes the book as it goes. Quoting each leg on
+its own prices every order as if it were first — this shows what the later legs
+will really cost, and exits `2` if the sequence outruns the observed book.
+
 ## Watch until something breaks
 
 ```bash
@@ -127,7 +137,7 @@ git checkout package.json # before committing
 
 ```bash
 pnpm install
-pnpm test    # 47 tests
+pnpm test    # 53 tests
 pnpm build
 node dist/bin.js help
 ```
