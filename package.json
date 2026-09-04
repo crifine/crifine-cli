@@ -1,0 +1,44 @@
+{
+  "name": "@crifine/cli",
+  "version": "0.1.0",
+  "description": "Pre-trade checks from the terminal and from CI, with exit codes a pipeline can branch on.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "crifine": "./dist/bin.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@crifine/sdk": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "cli",
+    "defi",
+    "execution",
+    "slippage",
+    "ci"
+  ],
+  "packageManager": "pnpm@11.8.0"
+}

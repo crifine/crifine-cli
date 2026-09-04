@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tgz
+
+# Committed once @crifine/sdk is on npm. Until then any lockfile generated here
+# would pin a local path, which is the failure that broke CI across the
+# tokelio-labs fleet — see github/0001 in the planning repo.
+pnpm-lock.yaml
