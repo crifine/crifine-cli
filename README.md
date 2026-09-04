@@ -17,6 +17,8 @@ crifine board --chain ethereum
 crifine verify https://crifine.app/api/v1/exit/aave-v3-weth
 crifine pools
 crifine watch uniswap-v3-zec --size 500k --threshold -4 --interval 30
+crifine size aave-v3-weth --max-gap -2
+crifine ladder aave-v3-weth
 ```
 
 Every command takes `--json`.
@@ -56,6 +58,23 @@ case $? in
   *) echo "check failed"; exit 1 ;;
 esac
 ```
+
+## How much fits?
+
+```bash
+crifine size aave-v3-weth --max-gap -2
+```
+
+The question that comes before the price. Computed locally from the ladder, so
+it costs **one** request rather than a dozen probes at a dozen sizes.
+
+```bash
+crifine ladder aave-v3-weth
+```
+
+Prints the book, and exits `4` if the ladder looks unusable — most often
+cumulative figures published as incremental, which makes a thin book look
+several times deeper than it is.
 
 ## Watch until something breaks
 
@@ -108,7 +127,7 @@ git checkout package.json # before committing
 
 ```bash
 pnpm install
-pnpm test    # 26 tests
+pnpm test    # 47 tests
 pnpm build
 node dist/bin.js help
 ```
