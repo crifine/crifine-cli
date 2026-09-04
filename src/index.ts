@@ -13,6 +13,7 @@ import {
   decide,
   maxSizeFor,
   rankRoutes,
+  simulateOrders,
   validateLadder,
   verify,
   type Decision,
@@ -37,6 +38,7 @@ USAGE
   crifine exit <pool> --size <size> [--max-gap <pct>]
   crifine compare <asset> --size <size> [--max-gap <pct>]
   crifine size <pool> --max-gap <pct>
+  crifine simulate <pool> --sizes <a,b,c>
   crifine ladder <pool>
   crifine decide <pool> --size <size> --max-gap <pct> [--min-days <n>]
   crifine watch <pool> --size <size> --threshold <pct> [--interval <sec>]
@@ -482,6 +484,59 @@ async function cmdLadder(args: Args): Promise<Run> {
   return { code: problems.length > 0 ? EXIT.ERROR : EXIT.OK, stdout: lines.join("\n") };
 }
 
+
+/**
+ * Several orders against one book, in sequence.
+ *
+ * Quoting each leg on its own prices every order as if it were first, which is
+ * the flattering version and the one that surprises people at settlement. This
+ * consumes the book as it goes, so the later legs cost what they will actually
+ * cost.
+ */
+async function cmdSimulate(args: Args): Promise<Run> {
+  const pool = args.positional[0];
+  const raw = flagString(args, "sizes");
+
+  if (!pool) return { code: EXIT.ERROR, stdout: "error: a pool is required" };
+  if (!raw) {
+    return { code: EXIT.ERROR, stdout: "error: --sizes is required, e.g. --sizes 500k,500k,1m" };
+  }
+
+  const sizes = raw.split(",").map((part) => parseSize(part.trim()));
+  if (sizes.some((size) => size === undefined)) {
+    return { code: EXIT.ERROR, stdout: `error: could not read every size in "${raw}"` };
+  }
+
+  const ladder = await clientFrom(args).ladder(pool);
+  const run = simulateOrders(ladder.levels, ladder.oracle_price, sizes as number[]);
+
+  if (flagBool(args, "json")) {
+    return {
+      code: run.fills.some((fill) => fill.exceedsBook) ? EXIT.PAST_BOOK : EXIT.OK,
+      stdout: JSON.stringify({ pool: ladder.pool, as_of: ladder.as_of, ...run }, null, 2),
+    };
+  }
+
+  const rows: [string, string][] = run.fills.map((fill, index) => [
+    `${index + 1}. ${size(fill.sizeUsd)}`,
+    `${price(fill.realizedPriceEst)}  ${gapColour(fill.exitGapPct)(pct(fill.exitGapPct))}${
+      fill.exceedsBook ? red("  past the book") : dim(`  book left ${size(fill.depthBeforeUsd)}`)
+    }`,
+  ]);
+
+  return {
+    code: run.fills.some((fill) => fill.exceedsBook) ? EXIT.PAST_BOOK : EXIT.OK,
+    stdout: [
+      `${bold(ladder.pool)}  ${dim(`${run.fills.length} orders · ${size(run.totalUsd)} total`)}`,
+      "",
+      table(rows),
+      "",
+      `  ${dim("blended")}  ${gapColour(run.blendedGapPct)(pct(run.blendedGapPct))}`,
+      `  ${dim("each leg pays for the ones before it — quoting them separately understates the last")}`,
+    ].join("\n"),
+  };
+}
+
 export async function run(
   argv: readonly string[],
   sleep: Sleep = defaultSleep,
@@ -498,6 +553,7 @@ export async function run(
       case "exit": return await cmdExit(args);
       case "compare": return await cmdCompare(args);
       case "size": return await cmdSize(args);
+      case "simulate": return await cmdSimulate(args);
       case "ladder": return await cmdLadder(args);
       case "decide": return await cmdDecide(args);
       case "watch": return await cmdWatch(args, sleep);
