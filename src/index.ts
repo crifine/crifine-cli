@@ -11,7 +11,9 @@ import {
   CrifineError,
   blocks,
   decide,
+  maxSizeFor,
   rankRoutes,
+  validateLadder,
   verify,
   type Decision,
   type Evidence,
@@ -34,6 +36,8 @@ export const HELP = `crifine — what a given order size actually clears at
 USAGE
   crifine exit <pool> --size <size> [--max-gap <pct>]
   crifine compare <asset> --size <size> [--max-gap <pct>]
+  crifine size <pool> --max-gap <pct>
+  crifine ladder <pool>
   crifine decide <pool> --size <size> --max-gap <pct> [--min-days <n>]
   crifine watch <pool> --size <size> --threshold <pct> [--interval <sec>]
   crifine board [--chain <chain>]
@@ -382,6 +386,102 @@ export function codeForDecision(decision: Decision): ExitCode {
   }
 }
 
+
+/**
+ * The question people ask before they ask about a price: how much fits?
+ *
+ * Computed locally from the ladder rather than by probing the API at a dozen
+ * sizes — on a per-request API that would be a dozen charges for one answer.
+ */
+async function cmdSize(args: Args): Promise<Run> {
+  const pool = args.positional[0];
+  const maxGapPct = flagNumber(args, "max-gap");
+
+  if (!pool) return { code: EXIT.ERROR, stdout: "error: a pool is required" };
+  if (maxGapPct === undefined || !(maxGapPct < 0)) {
+    return {
+      code: EXIT.ERROR,
+      stdout: "error: --max-gap is required and must be negative — every size clears at some cost",
+    };
+  }
+
+  const ladder = await clientFrom(args).ladder(pool);
+  const step = flagNumber(args, "step");
+  const affordable = maxSizeFor(ladder.levels, ladder.oracle_price, maxGapPct, {
+    ...(step === undefined ? {} : { step }),
+  });
+
+  if (flagBool(args, "json")) {
+    return {
+      code: affordable > 0 ? EXIT.OK : EXIT.GAP_EXCEEDED,
+      stdout: JSON.stringify(
+        { pool: ladder.pool, as_of: ladder.as_of, max_gap_pct: maxGapPct, max_size_usd: affordable },
+        null,
+        2,
+      ),
+    };
+  }
+
+  if (affordable === 0) {
+    return {
+      code: EXIT.GAP_EXCEEDED,
+      stdout: `${bold(ladder.pool)}\n\n  ${red("nothing")} clears within ${pct(maxGapPct)} — even the first band costs more.`,
+    };
+  }
+
+  return {
+    code: EXIT.OK,
+    stdout: [
+      `${bold(ladder.pool)}  ${dim(`as of ${ladder.as_of}`)}`,
+      "",
+      table([
+        [`within ${pct(maxGapPct)}`, green(size(affordable))],
+        ["whole book", dim(size(ladder.levels.reduce((sum, l) => sum + l.usd, 0)))],
+      ]),
+    ].join("\n"),
+  };
+}
+
+/** Print the ladder, and say so loudly if it looks unusable. */
+async function cmdLadder(args: Args): Promise<Run> {
+  const pool = args.positional[0];
+  if (!pool) return { code: EXIT.ERROR, stdout: "error: a pool is required" };
+
+  const ladder = await clientFrom(args).ladder(pool);
+  const problems = validateLadder(ladder.levels);
+
+  if (flagBool(args, "json")) {
+    return {
+      code: problems.length > 0 ? EXIT.ERROR : EXIT.OK,
+      stdout: JSON.stringify({ ...ladder, problems }, null, 2),
+    };
+  }
+
+  const total = ladder.levels.reduce((sum, level) => sum + level.usd, 0);
+  const widest = Math.max(...ladder.levels.map((level) => level.usd), 1);
+
+  const lines = [
+    `${bold(ladder.pool)}  ${dim(`as of ${ladder.as_of} · oracle ${price(ladder.oracle_price)}`)}`,
+    "",
+    ...ladder.levels.map((level) => {
+      const bar = "█".repeat(Math.max(1, Math.round((level.usd / widest) * 24)));
+      return `  ${dim(`−${String(level.bps).padStart(3)}bp`)}  ${bar.padEnd(24)}  ${size(level.usd)}`;
+    }),
+    "",
+    `  ${dim("book total")}  ${size(total)}`,
+  ];
+
+  if (problems.length > 0) {
+    lines.push(
+      "",
+      `  ${red("this ladder looks unusable:")}`,
+      ...problems.map((problem) => `    - ${problem.message}`),
+    );
+  }
+
+  return { code: problems.length > 0 ? EXIT.ERROR : EXIT.OK, stdout: lines.join("\n") };
+}
+
 export async function run(
   argv: readonly string[],
   sleep: Sleep = defaultSleep,
@@ -397,6 +497,8 @@ export async function run(
     switch (args.command) {
       case "exit": return await cmdExit(args);
       case "compare": return await cmdCompare(args);
+      case "size": return await cmdSize(args);
+      case "ladder": return await cmdLadder(args);
       case "decide": return await cmdDecide(args);
       case "watch": return await cmdWatch(args, sleep);
       case "board": return await cmdBoard(args);
