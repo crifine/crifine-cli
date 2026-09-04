@@ -26,10 +26,13 @@ jobs:
           repository: crifine/crifine-sdk
           path: crifine-sdk
 
-      # No `version:` here on purpose — package.json's `packageManager`
-      # field is the single source of truth, and specifying both makes
-      # pnpm/action-setup fail with a version conflict.
+      # This repo is checked out into `main/`, so the workspace root has no
+      # package.json for the action to read. Point it at the real one rather
+      # than pinning a version here, which would conflict with the
+      # `packageManager` field the manifest already declares.
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: main/package.json
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
 
