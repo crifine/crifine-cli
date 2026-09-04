@@ -64,7 +64,7 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      - name: Fail if a file: dependency was committed
+      - name: "Fail if a file: dependency was committed"
         run: |
           if git -C . show HEAD:package.json | grep -q '"file:'; then
             echo "package.json ships a file: dependency — it would break on install"
